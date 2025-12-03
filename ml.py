@@ -185,3 +185,8 @@ results = pd.DataFrame({
 
 print("Сравнение моделей:\n")
 print(results)
+
+results.to_csv("results.csv", index=False)
+results.to_excel("results.xlsx", index=False)
+results.to_json("results.json", orient="records", indent=2)
+
