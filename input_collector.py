@@ -8,6 +8,28 @@ import warnings
 warnings.filterwarnings('ignore', category=UserWarning)
 
 
+def results(features, feature_names, price):
+    file_name = "result.txt"
+    with open(file_name, 'w', encoding='utf-8') as f:
+        print("\n" + "═" * 56)
+        f.write("\n" + "═" * 56)
+        print("\t\t\t\t\t  РЕЗУЛЬТАТЫ:")
+        f.write("\n\t\t\t\t\t  РЕЗУЛЬТАТЫ:\n")
+        print("─" * 56)
+        f.write("─" * 56 + "\n")
+        original_features = {k: v for i, (k, v) in enumerate(features.items()) if i < 26}
+        max_len = len(max(feature_names, key=len))
+        for i, ((key, value), display_name) in enumerate(zip(original_features.items(), feature_names), 1):
+            print(f"{i:2}. {display_name:{max_len}} : {value}")
+            f.write(f"{i:2}. {display_name:{max_len}} : {value}\n")
+        print("─" * 56)
+        f.write("─" * 56)
+        print(f"Цена: {price:,.2f} руб.")
+        f.write(f"\nЦена: {price:,.2f} рублей\n")
+        print("═" * 56)
+        f.write("═" * 56)
+
+
 INPUT_SCHEMA = [
     ('housing_type', 'Тип жилья', 'categorical', {
         1: 'Новостройка',
@@ -150,10 +172,13 @@ def main():
     cat_cols = ['district', 'housing_type', 'is_studio', 'bathrooms_type', 'kitchen_and_living', 'condition',
                 'nearest_metro_st',
                 'parking_type', 'building_type', 'furniture', 'deal_type', 'first_floor_is_com', 'playground']
-    print("\n--- Собранные параметры ---")
-    for k, v in features.items():
-        print(f"{k}: {v}")
-    print("\n" + "_"*44)
+    cols_to_print = ['Тип квартиры', 'Район', 'Число комнат', 'Студия', 'Общая площадь', 'Жилая площадь',
+                     'Площадь кухни', 'Этаж', 'Этажей в доме', 'Тип ванной', 'Число лоджий', 'Число балконов',
+                     'Совмещенная кухня и зал', 'Ремонт', 'Высота потолков', 'Ближайшее метро', 'Минут пешком до метро',
+                     'Число грузовых лифтов', 'Число пассажирских лифтов', 'Тип парковки', 'Тип дома',
+                     'Продажа с мебелью', 'Тип сделки', 'Год сдачи дома', '1 этаж - коммерция',
+                     'Есть детская площадка']
+
     if features['num_floors'] > 0:
         features['floor_ratio'] = features['floor'] / features['num_floors']
     else:
@@ -197,7 +222,7 @@ def main():
     pred_scaled = tabnet.predict(X_scaled).flatten()
     pred_price = scaler_y.inverse_transform(pred_scaled.reshape(-1, 1)).flatten()[0]
 
-    print(f"\nПредсказанная цена: {pred_price:,.0f} ₽")
+    results(features, cols_to_print, pred_price)
 
 
 if __name__ == "__main__":
