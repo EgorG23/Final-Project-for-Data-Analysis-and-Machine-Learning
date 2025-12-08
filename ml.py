@@ -10,14 +10,8 @@ from tensorflow.keras import Sequential
 from tensorflow.keras.layers import Dense, Dropout, BatchNormalization, LeakyReLU
 from keras.callbacks import EarlyStopping, ReduceLROnPlateau
 from pytorch_tabnet.tab_model import TabNetRegressor
+from sklearn.linear_model import LinearRegression, Lasso
 
-def fill_missing(data):
-    for col in data.columns:
-        if data[col].dtype in ['float64', 'int64', 'float32', 'int32']:
-            data[col].fillna(data[col].mean(), inplace=True)
-        else:
-            data[col].fillna(data[col].mode()[0], inplace=True)
-    return data
 
 def metrics(y_true, y_pred):
     return {
@@ -28,29 +22,31 @@ def metrics(y_true, y_pred):
     }
 
 
-# ЭТАП 1 -- ОБРАБОТКА ДАННЫХ
+def fill_missing(data):
+    for col in data.columns:
+        if data[col].dtype in ['float64', 'int64', 'float32', 'int32']:
+            data[col].fillna(data[col].mean(), inplace=True)
+        else:
+            data[col].fillna(data[col].mode()[0], inplace=True)
+    return data
+
+# ЭТАП 1 - ОБРАБОТКА ДАННЫХ
 
 data = pd.read_csv("Dataset_5000.csv", sep=";")
 data = fill_missing(data)
 data = data.apply(lambda col: col.map(lambda x: str(x).replace("\xa0", "").strip() if pd.notna(x) else x))
-cols_with_commas = [
-    "rooms", "total_area", "living_area", "kitchen_area", "num_floors", "floor",
-    "num_loggia", "num_balcony", "num_freight_lift", "num_passenger_lift", "house_completion_year", "ceiling_height"]
-
+cols_with_commas = ["rooms", "total_area", "living_area", "kitchen_area", "num_floors", "floor",
+                    "num_loggia", "num_balcony", "num_freight_lift", "num_passenger_lift", "house_completion_year",
+                    "ceiling_height"]
 for col in cols_with_commas:
     if col in data.columns:
         data[col] = data[col].map(lambda x: str(x).replace(",", ".").replace(" ", "") if pd.notna(x) else x)
         data[col] = pd.to_numeric(data[col], errors="coerce")
 data['price'] = data['price'].str.replace(" ", "")
-#print(data['price'])
 data["price"] = pd.to_numeric(data["price"], errors="coerce")
-#print(data['price'])
 data.dropna(subset=["price"], inplace=True)
-# FEATURE ENGINEERING !!!
 data["floor_ratio"] = data["floor"] / data["num_floors"].replace(0, np.nan)
 data["living_ratio"] = data["living_area"] / data["total_area"].replace(0, np.nan)
-
-#data.fillna(0, inplace=True)
 print("Типы данных в исходном DataFrame:")
 print(data.dtypes)
 cat_cols = data.select_dtypes(include=["object"]).columns.tolist()
@@ -59,7 +55,8 @@ data_encoded = pd.get_dummies(data, columns=cat_cols, drop_first=True)
 for col in data_encoded.columns:
     if data_encoded[col].dtype in ['object', 'bool']:
         data_encoded[col] = data_encoded[col].astype(float)
-
+print("Типы данных в исходном DataFrame:")
+print(data_encoded.dtypes)
 data_encoded.replace([np.inf, -np.inf], np.nan, inplace=True)
 data_encoded.fillna(0, inplace=True)
 feature_cols = [c for c in data_encoded.columns if c != "price"]
@@ -90,6 +87,16 @@ with open("scaler_y.pkl", "wb") as f:
     pickle.dump(scaler_y, f)
 
 # ЭТАП 3 -- ОБУЧЕНИЕ МОДЕЛЕЙ
+
+# LinearRegression
+
+model_lr = LinearRegression()
+model_lr.fit(X_train_scaled, y_train_scaled)
+
+# LASSO
+
+model_lasso = Lasso(alpha=0.001, max_iter=5000)
+model_lasso.fit(X_train_scaled, y_train_scaled)
 
 # MLP базовая
 
@@ -160,7 +167,7 @@ tabnet.fit(
     drop_last=False
 )
 
-# ЭТАП 4 -- СОХРАНЕНИЕ МОДЕЛЕЙ
+# ЭТАП 4 -- СОХРАНЕНИЕ МОДЕЛЕЙ + ПРЕДСКЗААНИЯ
 
 model_mlp_base.save("mlp_base.keras")
 model_mlp.save("mlp_adv.keras")
@@ -175,12 +182,20 @@ pred_mlp = scaler_y.inverse_transform(pred_mlp_scaled.reshape(-1, 1)).flatten()
 pred_tabnet_scaled = tabnet.predict(X_test_scaled).flatten()
 pred_tabnet = scaler_y.inverse_transform(pred_tabnet_scaled.reshape(-1, 1)).flatten()
 
+pred_lr_scaled = model_lr.predict(X_test_scaled)
+pred_lr = scaler_y.inverse_transform(pred_lr_scaled.reshape(-1, 1)).flatten()
+
+pred_lasso_scaled = model_lasso.predict(X_test_scaled)
+pred_lasso = scaler_y.inverse_transform(pred_lasso_scaled.reshape(-1, 1)).flatten()
+
 # ЭТАП 5 -- ОЦЕНКА КАЧЕСТВА
 
 results = pd.DataFrame({
     "MLP Базовая": metrics(y_test, pred_base),
     "MLP Улучшенная": metrics(y_test, pred_mlp),
-    "TabNet": metrics(y_test, pred_tabnet)
+    "TabNet": metrics(y_test, pred_tabnet),
+    "LinearRegression": metrics(y_test, pred_lr),
+    "Lasso": metrics(y_test, pred_lasso)
 }).T
 
 print("Сравнение моделей:\n")
@@ -189,4 +204,3 @@ print(results)
 results.to_csv("results.csv", index=False)
 results.to_excel("results.xlsx", index=False)
 results.to_json("results.json", orient="records", indent=2)
-
